@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#ffd23f">
+    <title>Family Bank</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;800&family=Patrick+Hand&display=swap" rel="stylesheet">
+    <style>
+        :root { --ink: #2b2d42; --sun: #ffd23f; --pink: #ff6b9d; --sky: #4cc9f0; --mint: #6bd8a0; --grape: #9b5de5; --paper: #fff8e7; }
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        body {
+            font-family: "Bank Gothic", "BankGothic Md BT", "Bank Gothic BT", "Orbitron", sans-serif;
+            font-weight: 600; letter-spacing: .5px; color: var(--ink);
+            max-width: 600px; margin: 0 auto; padding: 16px;
+            padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right));
+            padding-bottom: max(24px, env(safe-area-inset-bottom));
+            background-color: var(--paper);
+            background-image: radial-gradient(var(--sky) 2px, transparent 2.5px), radial-gradient(var(--pink) 2px, transparent 2.5px);
+            background-size: 46px 46px; background-position: 0 0, 23px 23px;
+            min-height: 100vh;
+        }
+        h1 { font-size: 26px; margin: 0; text-transform: uppercase; transform: rotate(-2deg); display: inline-block;
+             background: var(--sun); border: 3px solid var(--ink); border-radius: 14px 40px 14px 40px; padding: 6px 14px; box-shadow: 4px 4px 0 var(--ink); }
+        h2, h3 { margin: 0 0 12px; text-transform: uppercase; }
+        h3 { font-size: 15px; display: inline-block; background: var(--mint); border: 2px solid var(--ink); border-radius: 20px 6px 20px 6px; padding: 4px 12px; transform: rotate(1deg); }
+        .header { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 18px; }
+        .card { background: #fff; padding: 18px; border: 3px solid var(--ink); border-radius: 22px 10px 24px 12px / 12px 24px 10px 22px; box-shadow: 5px 5px 0 var(--ink); margin-bottom: 22px; }
+        .balances { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+        .balance-card { background: var(--sun); padding: 18px; border: 3px solid var(--ink); border-radius: 30px 12px 30px 12px; box-shadow: 5px 5px 0 var(--ink); text-align: center; position: relative; transform: rotate(-1deg); }
+        .balance-card::before { content: "★"; position: absolute; top: -16px; right: 14px; font-size: 30px; color: var(--pink); text-shadow: 2px 2px 0 var(--ink); transform: rotate(15deg); }
+        .balance-amount { font-size: 40px; font-weight: 800; color: var(--ink); margin-top: 6px; }
+        .btn { font-family: inherit; font-weight: 800; letter-spacing: .5px; background: var(--sky); color: var(--ink); border: 3px solid var(--ink); padding: 14px 20px; min-height: 52px;
+               border-radius: 16px 28px 16px 28px; cursor: pointer; width: 100%; font-size: 17px; box-shadow: 4px 4px 0 var(--ink); transition: transform .08s, box-shadow .08s; text-transform: uppercase; }
+        .btn:active { transform: translate(4px, 4px); box-shadow: 0 0 0 var(--ink); }
+        #auth-btn { background: #fff; padding: 8px 14px; min-height: 40px; font-size: 14px; }
+        #back-btn { background: #fff; margin-bottom: 18px; }
+        #record-btn { background: var(--pink); font-size: 19px; }
+        .child-btn { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 28px 8px; min-height: 190px; font-size: 22px; }
+        .child-btn .face { font-size: 64px; line-height: 1; filter: drop-shadow(3px 3px 0 var(--ink)); }
+        .child-btn.c0 { background: var(--pink); border-radius: 40px 14px 40px 14px; transform: rotate(-2deg); }
+        .child-btn.c1 { background: var(--mint); border-radius: 14px 40px 14px 40px; transform: rotate(2deg); }
+        .child-btn.c2 { background: var(--grape); color: #fff; }
+        .child-btn:active { transform: translate(4px, 4px) rotate(0); }
+        .transaction { border-bottom: 3px dashed var(--ink); padding: 12px 0; font-size: 16px; }
+        .transaction:last-child { border-bottom: none; }
+        .transaction .sub { font-family: "Patrick Hand", "Bradley Hand", cursive; font-weight: 400; font-size: 18px; color: #555; letter-spacing: 0; }
+        .badge { display: inline-block; border: 2px solid var(--ink); border-radius: 12px; padding: 1px 10px; margin-right: 6px; font-size: 13px; text-transform: uppercase; }
+        .badge.in { background: var(--mint); } .badge.out { background: var(--pink); }
+        input, select { font-family: inherit; font-weight: 600; width: 100%; font-size: 16px; padding: 12px; margin-bottom: 12px; border: 3px solid var(--ink); border-radius: 12px 18px 12px 18px; background: var(--paper); color: var(--ink); }
+        #error-box { border: 3px solid var(--ink); font-size: 14px; }
+            @keyframes slideIn { from { opacity: 0; transform: translateX(-40px) scale(.95); } to { opacity: 1; transform: none; } }
+        .ledger-row { opacity: 0; animation: slideIn .5s ease-out forwards; }
+        .ledger-row.interest { background: #fff3b0; margin: 0 -8px; padding-left: 8px; padding-right: 8px; border-radius: 10px; }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div class="header">
+            <h1>🐷 Family Bank</h1>
+            <div style="display:flex;gap:8px"><button id="settings-btn" class="btn" style="width:auto;background:#fff;padding:8px 14px;min-height:40px;display:none" aria-label="Settings">⚙️</button><button id="auth-btn" class="btn" style="width: auto;">Login</button></div>
+        </div>
+
+        <div id="main-content" style="display: none;">
+            <div id="settings-card" class="card" style="display:none">
+                <h3>⚙️ Settings</h3>
+                <label for="rate-input" style="display:block;margin:12px 0 6px">Monthly interest (%)</label>
+                <input type="number" id="rate-input" step="0.1" min="0" max="100">
+                <button id="rate-save" class="btn">Save</button>
+            </div>
+
+            <div id="child-picker" class="balances"></div>
+
+            <div id="ledger-view" style="display: none;">
+                <button id="ledger-back" class="btn" style="background:#fff;margin-bottom:18px">&larr; Back</button>
+                <div class="balance-card" style="background:var(--sky)">
+                    <div id="ledger-name"></div>
+                    <div id="ledger-balance" class="balance-amount">$0.00</div>
+                </div>
+                <div class="card" style="margin-top:22px">
+                    <h3>📒 Last 10</h3>
+                    <div id="ledger-list"></div>
+                </div>
+            </div>
+
+            <div id="child-view" style="display: none;">
+                <button id="back-btn" class="btn">&larr; Back</button>
+                <div class="balance-card">
+                    <div id="child-name"></div>
+                    <div id="child-balance" class="balance-amount">$0.00</div>
+                </div>
+
+                <button id="ledger-btn" class="btn" style="margin-top:18px;background:var(--mint)">📒 Ledger</button>
+
+                <div class="card" style="margin-top: 20px;">
+                    <button id="record-btn" class="btn">✨ Record a moment</button>
+                    <form id="record-form" style="display: none; margin-top: 15px;">
+                        <select id="rec-type">
+                            <option value="deposit">Deposit</option>
+                            <option value="withdrawal">Withdrawal</option>
+                            <option value="interest">Interest</option>
+                            <option value="adjustment">Adjustment (+/-)</option>
+                        </select>
+                        <input type="number" step="0.01" id="rec-amount" placeholder="Amount" required>
+                        <input type="text" id="rec-note" placeholder="Note (optional)">
+                        <input type="text" id="rec-tag" placeholder="Achievement tag (optional)">
+                        <button type="submit" class="btn">Save</button>
+                    </form>
+                </div>
+
+                <div class="card">
+                    <h3>📜 Recent</h3>
+                    <div id="transaction-list"></div>
+                </div>
+
+                <div class="card">
+                    <h3>🙋 Withdrawal requests</h3>
+                    <div id="request-list"></div>
+                </div>
+            </div>
+        </div>
+
+        <div id="login-form" class="card">
+            <h2>Parent Login</h2>
+            <input type="email" id="email" placeholder="Email">
+            <input type="password" id="password" placeholder="Password">
+            <button id="login-btn" class="btn">Sign In</button>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
+
+

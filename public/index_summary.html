@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Family Bank — index.html Summary</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 880px; margin: 0 auto; padding: 24px; background: #fff8e7; color: #2b2d42; line-height: 1.5; }
+  h1, h2 { border-bottom: 3px solid #2b2d42; padding-bottom: 4px; }
+  table { border-collapse: collapse; width: 100%; margin: 12px 0 24px; background: #fff; }
+  th, td { border: 2px solid #2b2d42; padding: 8px 10px; text-align: left; vertical-align: top; }
+  th { background: #ffd23f; }
+  code { background: #eee; padding: 1px 5px; border-radius: 4px; }
+  .flow { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 16px 0; }
+  .box { border: 3px solid #2b2d42; border-radius: 16px 6px 16px 6px; padding: 10px 14px; box-shadow: 3px 3px 0 #2b2d42; font-weight: 700; }
+  .b1 { background: #ff6b9d; } .b2 { background: #6bd8a0; } .b3 { background: #4cc9f0; } .b4 { background: #ffd23f; }
+  .arrow { font-size: 24px; }
+</style>
+</head>
+<body>
+<h1>Family Bank — <code>index.html</code> + <code>app.js</code> summary</h1>
+<p>Single-page, phone-friendly parent app. Static HTML/CSS/JS talking to Supabase (auth + Postgres with row-level security). Status: logged in, child picker, child view, record form, ledger with interest and settings all implemented. Browser-verified up to the first working screen; the ledger, interest and restyle were syntax-checked only (<strong>not yet browser-tested</strong>).</p>
+
+<h2>Screen flow</h2>
+<div class="flow">
+  <div class="box b1">Login</div><span class="arrow">→</span>
+  <div class="box b2">Pick Athena / Felix</div><span class="arrow">→</span>
+  <div class="box b3">Child view<br><small>record, recent, requests</small></div><span class="arrow">→</span>
+  <div class="box b4">Ledger<br><small>3 s animation</small></div>
+</div>
+<p>⚙️ Settings (monthly interest %) is reachable from the header whenever logged in.</p>
+
+<h2>Table of contents — index.html</h2>
+<table>
+<tr><th>Lines</th><th>Section</th><th>What it does</th></tr>
+<tr><td>1–11</td><td>Head</td><td>Viewport (<code>viewport-fit=cover</code> for iPhone notch), theme colour, Supabase JS from CDN.</td></tr>
+<tr><td>12–58</td><td>&lt;style&gt;</td><td>Playful theme: colour variables, thick outlines, uneven corners, hard shadows, Bank Gothic → Orbitron font stack, ledger row animation.</td></tr>
+<tr><td>62–66</td><td>Header</td><td>Title sticker, ⚙️ settings button (hidden until login), Login/Logout button.</td></tr>
+<tr><td>67</td><td><code>#main-content</code></td><td>Wrapper shown only when signed in.</td></tr>
+<tr><td>68–74</td><td><code>#settings-card</code></td><td>Monthly interest % field and Save.</td></tr>
+<tr><td>75</td><td><code>#child-picker</code></td><td>Empty grid filled by JS with big child buttons (first screen).</td></tr>
+<tr><td>77–88</td><td><code>#ledger-view</code></td><td>Balance card and last-10 list; filled by JS.</td></tr>
+<tr><td>89–125</td><td><code>#child-view</code></td><td>Back, balance, Ledger button, Record-a-moment form (<code>#record-form</code>), recent transactions, withdrawal requests.</td></tr>
+<tr><td>126–133</td><td><code>#login-form</code></td><td>Email/password sign-in.</td></tr>
+<tr><td>134</td><td>Script</td><td>Loads <code>app.js</code>.</td></tr>
+</table>
+
+<h2>app.js map</h2>
+<table>
+<tr><th>Lines</th><th>Item</th><th>Purpose</th></tr>
+<tr><td>2–4</td><td><code>SUPABASE_URL</code>, <code>SUPABASE_ANON_KEY</code></td><td>Project URL and publishable key (safe in browser only because RLS is on).</td></tr>
+<tr><td>15–17</td><td><code>currentUser</code>, <code>parent</code>, <code>currentChild</code></td><td>Session state; <code>parent.family_id</code> is written onto new rows.</td></tr>
+<tr><td>18</td><td><code>ANIM_MS</code></td><td>Ledger animation length (3000 ms). Change to speed up/slow down.</td></tr>
+<tr><td>19</td><td><code>getRate()</code></td><td>Interest % from <code>localStorage</code> (default 5, per-browser).</td></tr>
+<tr><td>21–32</td><td><code>showError</code></td><td>Red error box + unhandled-rejection trap.</td></tr>
+<tr><td>34–35</td><td><code>money</code>, <code>esc</code></td><td>Currency formatting and HTML escaping.</td></tr>
+<tr><td>39–66</td><td><code>updateUI</code>, <code>loadParent</code></td><td>Show/hide screens by session; load own <code>parents</code> row.</td></tr>
+<tr><td>67–99</td><td><code>showChildPicker</code>, <code>showChild</code></td><td>List <code>children.name</code>; open a child.</td></tr>
+<tr><td>101–130</td><td><code>ensureInterest</code></td><td>Inserts a missing <code>interest</code> transaction for each past month start (compounding on prior balance).</td></tr>
+<tr><td>131–162</td><td><code>countUp</code>, <code>showLedger</code></td><td>3 s balance count-up and staggered row slide-in of 10 latest transactions.</td></tr>
+<tr><td>163–186</td><td><code>loadData</code></td><td>Child balance, recent transactions, withdrawal requests.</td></tr>
+<tr><td>187–241</td><td>Event handlers</td><td>Login/logout, back, ledger, settings, record form submit (inserts into <code>transactions</code>).</td></tr>
+</table>
+
+<h2>Tweakable variables</h2>
+<table>
+<tr><th>Where</th><th>Name</th><th>Effect</th></tr>
+<tr><td>CSS <code>:root</code></td><td><code>--sun --pink --sky --mint --grape --paper --ink</code></td><td>Whole colour palette.</td></tr>
+<tr><td>CSS <code>body</code></td><td><code>font-family</code></td><td>Put a self-hosted licensed Bank Gothic first to use the real font on iPhone.</td></tr>
+<tr><td>app.js</td><td><code>ANIM_MS</code></td><td>Ledger animation duration.</td></tr>
+<tr><td>app.js</td><td><code>faces</code> (in <code>showChildPicker</code>)</td><td>Emoji per child button.</td></tr>
+<tr><td>app.js</td><td><code>.slice(0, 10)</code> in <code>showLedger</code></td><td>Number of ledger rows.</td></tr>
+<tr><td>Browser storage</td><td><code>interestRate</code></td><td>Monthly interest %, set via ⚙️.</td></tr>
+</table>
+
+<h2>Data assumptions</h2>
+<ul>
+<li><code>children</code>: <code>id, name, family_id</code> (differs from <code>supabase/schema.sql</code>, which says <code>display_name</code>/<code>is_active</code>).</li>
+<li><code>parents</code>: <code>id, family_id, display_name</code>. <code>transactions</code> and <code>withdrawal_requests</code> columns are <strong>assumed</strong> to follow plan.md; unverified against the live DB.</li>
+<li>Balance = deposits + interest + adjustments − withdrawals (adjustments are always added, so negative corrections need a negative amount).</li>
+</ul>
+</body>
+</html>
