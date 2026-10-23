@@ -11,7 +11,7 @@
 |------|-------|
 | Export live schema and data | Done (read-only, nothing in this project was changed) |
 | Copy data into the habits project | Done, 13 transactions, reconciled |
-| Point the Allowances app at the new tables | **Not started** |
+| Point the Allowances app at the new tables | Done in draft PR #2 (not merged; real login untested) |
 | Archive or pause this Supabase project | **Not started** (yours to do) |
 
 ## 1. What the live project contains
@@ -35,9 +35,11 @@
 - [ ] Confirm each parent can sign in to the habits project (the Allowances app uses its own login, which is a separate account in this project).
 - [ ] Complete section 4 and check the app against the new tables with a real login.
 
-## 4. Changes to this repo (not yet made)
+## 4. Changes to this repo (made in PR #2, not merged)
 
-These switch the app to the habits project. Do them together in one change, then test with a parent login before merging, because the Pages site deploys from `main`.
+PR #2 (`allowances-use-habits-project`) makes these changes to `public/app.js`; the table below is what it covers. Test with a parent login before merging, because the Pages site deploys from `main`. The habits project has one auth user, so the app signs in with the same email and password as the habits app.
+
+One difference from the table: PR #2 reads kids from `family_members` and keys rows by `member_name` (name), not by an id. It also ignores the duplicate-key error when another device has already paid a month's interest (the database now allows one interest row per kid per month).
 
 | File | Line(s) | Change |
 |------|---------|--------|
