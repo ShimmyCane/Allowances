@@ -1,6 +1,6 @@
-// Initialize Supabase
-const SUPABASE_URL = 'https://kbhlwannygavrnwbebtf.supabase.co';
-const SUPABASE_ANON_KEY = 'sb_publishable_yarqDt4pfM3iz4VzeDbkyA_0Y0DV3Ry';
+// Initialize Supabase (shared Family project; tables are indexed in app_table_registry)
+const SUPABASE_URL = 'https://twvqvutrcobedvuhnzxq.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_eqUo8HEdEB1hMQM4CpSVqA_9i6b0qCo';
 const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const $ = (id) => document.getElementById(id);
@@ -13,7 +13,6 @@ const childView = $('child-view');
 const recordForm = $('record-form');
 
 let currentUser = null;
-let parent = null;
 let currentChild = null;
 const ANIM_MS = 3000;
 const getRate = () => { const r = parseFloat(localStorage.getItem('interestRate')); return isNaN(r) ? 5 : r; };
@@ -43,11 +42,9 @@ async function updateUI(session) {
         mainContent.style.display = 'block';
         authBtn.innerText = 'Logout';
         $('settings-btn').style.display = '';
-        await loadParent();
         await showChildPicker();
     } else {
         currentUser = null;
-        parent = null;
         currentChild = null;
         loginForm.style.display = 'block';
         mainContent.style.display = 'none';
@@ -57,20 +54,13 @@ async function updateUI(session) {
     }
 }
 
-async function loadParent() {
-    const { data, error } = await _supabase
-        .from('parents').select('*').eq('id', currentUser.id).maybeSingle();
-    if (error) { console.error(error); showError('Parent lookup failed: ' + error.message); }
-    parent = data;
-}
-
 async function showChildPicker() {
     currentChild = null;
     $('ledger-view').style.display = 'none';
     childView.style.display = 'none';
     childPicker.style.display = 'grid';
     const { data, error } = await _supabase
-        .from('children').select('*').order('name');
+        .from('family_members').select('*').eq('role', 'kid').order('display_order');
     if (error) { console.error(error); childPicker.innerHTML = '<div>Could not load children: ' + esc(error.message) + (error.code ? ' (' + esc(error.code) + ')' : '') + '</div>'; return; }
     childPicker.innerHTML = '';
     const faces = ['🦄', '🦊', '🐸', '🐼'];
@@ -82,10 +72,9 @@ async function showChildPicker() {
         childPicker.appendChild(b);
     });
     if (!data || !data.length) {
-        childPicker.innerHTML = '<div class="card" style="grid-column:1/-1">No children returned.<br>' +
+        childPicker.innerHTML = '<div class="card" style="grid-column:1/-1">No kids returned.<br>' +
             'Logged in as: ' + esc(currentUser && currentUser.id) + '<br>' +
-            'Parent row visible: ' + (parent ? 'yes, family ' + esc(parent.family_id) : 'NO (RLS on parents, or id mismatch)') + '<br>' +
-            'If the parent row is visible, the children RLS policy is likely missing or wrong.</div>';
+            'Kids are the family_members rows with role = kid. If there are some, the RLS policy on family_members is likely missing or wrong.</div>';
     }
 }
 
@@ -101,8 +90,8 @@ async function showChild(child) {
 async function ensureInterest(child) {
     const rate = getRate();
     if (!rate) return;
-    const { data, error } = await _supabase.from('transactions').select('*')
-        .eq('child_id', child.id).order('occurred_at', { ascending: true });
+    const { data, error } = await _supabase.from('allowance_transactions').select('*')
+        .eq('member_name', child.name).order('occurred_at', { ascending: true });
     if (error) { showError('Interest check: ' + error.message); return; }
     const txs = data || [];
     if (!txs.length) return;
@@ -117,10 +106,11 @@ async function ensureInterest(child) {
                 .reduce((s, t) => s + (t.type === 'withdrawal' ? -1 : 1) * Number(t.amount), 0);
             const amt = Math.round(bal * rate) / 100;
             if (amt > 0) {
-                const row = { family_id: parent.family_id, child_id: child.id, created_by: currentUser.id, type: 'interest',
+                const row = { member_name: child.name, type: 'interest',
                     amount: amt, note: 'Monthly interest ' + rate + '%', occurred_at: new Date(start).toISOString() };
-                const ins = await _supabase.from('transactions').insert(row);
-                if (ins.error) { showError('Interest save failed: ' + ins.error.message); return; }
+                const ins = await _supabase.from('allowance_transactions').insert(row);
+                // 23505: another device already paid this month's interest (one per kid per month).
+                if (ins.error && ins.error.code !== '23505') { showError('Interest save failed: ' + ins.error.message); return; }
                 txs.push(row);
             }
         }
@@ -145,7 +135,7 @@ async function showLedger() {
     $('ledger-balance').innerText = '$0.00';
     $('ledger-list').innerHTML = '';
     await ensureInterest(currentChild);
-    const { data, error } = await _supabase.from('transactions').select('*').eq('child_id', currentChild.id)
+    const { data, error } = await _supabase.from('allowance_transactions').select('*').eq('member_name', currentChild.name)
         .order('occurred_at', { ascending: false });
     if (error) { showError('Ledger: ' + error.message); return; }
     const txs = data || [];
@@ -163,9 +153,9 @@ async function showLedger() {
 async function loadData() {
     await ensureInterest(currentChild);
     const [tx, rq] = await Promise.all([
-        _supabase.from('transactions').select('*').eq('child_id', currentChild.id)
+        _supabase.from('allowance_transactions').select('*').eq('member_name', currentChild.name)
             .order('occurred_at', { ascending: false }),
-        _supabase.from('withdrawal_requests').select('*').eq('child_id', currentChild.id)
+        _supabase.from('allowance_withdrawal_requests').select('*').eq('member_name', currentChild.name)
             .order('created_at', { ascending: false }),
     ]);
     if (tx.error) showError('Transactions: ' + tx.error.message);
@@ -220,10 +210,8 @@ $('record-btn').addEventListener('click', () => {
 
 recordForm.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const { error } = await _supabase.from('transactions').insert({
-        family_id: parent.family_id,
-        child_id: currentChild.id,
-        created_by: currentUser.id,
+    const { error } = await _supabase.from('allowance_transactions').insert({
+        member_name: currentChild.name,
         type: $('rec-type').value,
         amount: $('rec-amount').value,
         note: $('rec-note').value || null,
