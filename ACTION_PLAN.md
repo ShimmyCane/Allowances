@@ -1,68 +1,64 @@
 # Action Plan: Retire the Allowances Project
 
 **Repo:** `Allowances` (source, to be archived)
-**Source Supabase project:** `kbhlwannygavrnwbebtf`
-**Destination:** `twvqvutrcobedvuhnzxq` (Family-Habits project)
-**Companion plan:** `../Family-Habits/ACTION_PLAN.md`
+**Source Supabase project:** `kbhlwannygavrnwbebtf` ("Allowance")
+**Destination:** `twvqvutrcobedvuhnzxq` ("Family", the habits project)
+**Companion plan and results:** `../Family-Habits/ACTION_PLAN.md`
 
-Status: draft. Nothing has been changed in this repo or in either database.
+## Status (2026-10-23)
 
----
+| Step | State |
+|------|-------|
+| Export live schema and data | Done (read-only, nothing in this project was changed) |
+| Copy data into the habits project | Done, 13 transactions, reconciled |
+| Point the Allowances app at the new tables | **Not started** |
+| Archive or pause this Supabase project | **Not started** (yours to do) |
 
-## 1. Prerequisites
+## 1. What the live project contains
 
-- [ ] Answer decisions D1–D5 in `../Family-Habits/ACTION_PLAN.md` section 0.
-- [ ] Connect the Supabase connector, then re-export the live schema of `kbhlwannygavrnwbebtf`. `supabase/schema.sql` in this repo is out of date (for example it has `display_name` and `is_active` on `children`, but `public/app.js` uses `name`).
-- [ ] Back up `kbhlwannygavrnwbebtf` (Dashboard → Database → Backups, or a full dump). Keep it until the archive is final.
+- `children`: Athena and Felix (columns `id`, `name`, `created_at`, `family_id`; no `is_active`)
+- `transactions`: 13 rows, all deposits. Type check allows only `deposit` and `withdrawal`.
+- `withdrawal_requests`: 0 rows
+- `families`: 1 row, `parents`: 1 row
+- `supabase/schema.sql` in this repo is out of date: it has `display_name`, `is_active` on `children` and allows `interest` and `adjustment`. The live project does not.
+- Balances: Athena 6.25 (7 rows), Felix 5.50 (6 rows)
 
-## 2. Freeze and copy (you do this manually)
+## 2. Where the data went
 
-Follow section 3 of the companion plan. In short:
+- Children were not copied. Athena and Felix already exist in `family_members` in the habits project and the ledger links to them by name.
+- Transactions went to `allowance_transactions` with the original id kept in `legacy_id`. Dates and notes are identical (checksum verified).
+- `family_id`, `created_by`, `families` and `parents` were not copied.
 
-- [ ] Tell both parents the app is read-only from a set time.
-- [ ] Remove duplicate `interest` rows per child per month before copying.
-- [ ] Copy `children`, then `transactions`, then `withdrawal_requests` into the destination tables, keeping the old `id` as `legacy_id`.
-- [ ] Record the interest rate (default 5%, stored in each browser's localStorage).
+## 3. Before archiving this project
 
-## 3. Reconcile
+- [ ] Take a backup of `kbhlwannygavrnwbebtf` (Dashboard → Database → Backups) and keep it.
+- [ ] Confirm each parent can sign in to the habits project (the Allowances app uses its own login, which is a separate account in this project).
+- [ ] Complete section 4 and check the app against the new tables with a real login.
 
-- [ ] Record each child's current balance from the app (`child-balance` on the child screen) before the freeze.
-- [ ] Run the reconciliation query in `../Family-Habits/supabase/allowances_migration.sql` (section 7).
-- [ ] All rows must match before continuing.
+## 4. Changes to this repo (not yet made)
 
-## 4. Changes to this repo (`Allowances`)
-
-Make these only after reconciliation passes. Until then, keep the app live as the fallback.
+These switch the app to the habits project. Do them together in one change, then test with a parent login before merging, because the Pages site deploys from `main`.
 
 | File | Line(s) | Change |
 |------|---------|--------|
-| `public/app.js` | 2–3 | Point to the destination project URL and publishable key (or remove the app if it's retired). |
-| `public/app.js` | 62 | `parents` lookup. Not needed if the habits project has no `parents`. Remove. |
-| `public/app.js` | 73 | `children` → `allowance_children`. Select `name`. |
-| `public/app.js` | 101–123 | `ensureInterest`. Writes `family_id` and `created_by`. Remove those fields, and decide whether interest runs in the database instead (a scheduled function) so it can't duplicate across browsers. |
-| `public/app.js` | 104, 122, 148, 166, 223 | `transactions` → `allowance_transactions`. Remove `family_id` and `created_by` from inserts. |
+| `public/app.js` | 2–3 | Use the habits project URL and publishable key. |
+| `public/app.js` | 62 | Remove the `parents` lookup (no `parents` table or `family_id` in the new project). |
+| `public/app.js` | 73 | `children` → `family_members`, filter `role = 'kid'`, order by `display_order`. |
+| `public/app.js` | 104, 148, 166, 223 | `transactions` → `allowance_transactions`. Use `member_name` instead of `child_id`. Drop `family_id` and `created_by`. |
 | `public/app.js` | 168 | `withdrawal_requests` → `allowance_withdrawal_requests`. |
-| `public/app.js` | 152, 174 | Balance calc in JS. Replace with a read from `allowance_balances`, or keep as-is if the app stays. |
-| `public/index.html` | — | Update any text that references the old project or schema. |
-| `supabase/schema.sql` | all | Either update to the live schema, or add a header saying it is historical and point to the destination. |
-| `plan.md` | 3 | Add an archive status note. Keep the original design. |
-| `.github/workflows/pages.yaml` | 4–6 | Disable the deploy trigger (or delete the workflow) once retired. |
-| `Archive/` | — | Keep. Move `convo v0.1.md` as is. |
+| `public/app.js` | 101–123 | `ensureInterest`: remove `family_id` and `created_by`. The old type check blocked interest rows; the new table allows `interest`. |
+| `public/app.js` | 152, 174 | Keep the JS balance sum, or read `allowance_balances`. Withdrawal approvals should call `approve_allowance_withdrawal`. |
+| `supabase/schema.sql` | all | Add a header marking it historical and pointing to `../Family-Habits/supabase/allowances_migration.sql`. |
+| `.github/workflows/pages.yaml` | — | Leave as is while the app is live. Disable when retired. |
+| `plan.md`, `Archive/` | — | Keep. Add an archive note at the end. |
 
-## 5. Verify
-
-- [ ] Sign in with each parent account and check balances match the reconciliation.
-- [ ] Record one test deposit and approve one test withdrawal in the destination, then delete the test rows.
-- [ ] Confirm no writes reach `kbhlwannygavrnwbebtf` after cutover (check its table row counts before and after).
-
-## 6. Archive
+## 5. Archive
 
 - [ ] Keep the final backup of `kbhlwannygavrnwbebtf`.
 - [ ] Pause the project, or delete it once the backup is confirmed restorable.
-- [ ] Set the GitHub Pages deploy to off, or leave a README note in `public/` pointing to the Family-Habits app.
-- [ ] Commit the repo changes in section 4.
+- [ ] Disable the Pages deploy, or leave a notice pointing to the new app.
 
-## 7. Notes
+## 6. Notes
 
-- The publishable key in `public/app.js` is visible to anyone. This is fine only with RLS enabled on the source project. After the move, the source project should not be used again.
-- ShimmyAI has an older copy of this plan (`04 AI/Allowances/allowances_ai_brief.md`). Treat this file as current.
+- The old project has the publishable key in `public/app.js`. It is safe only with RLS on; the project is read-only as far as this work is concerned.
+- ShimmyAI has an older copy of the design (`04 AI/Allowances/allowances_ai_brief.md`). Treat this file as current.
