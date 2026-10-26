@@ -60,7 +60,7 @@ async function showChildPicker() {
     childView.style.display = 'none';
     childPicker.style.display = 'grid';
     const { data, error } = await _supabase
-        .from('family_members').select('*').eq('role', 'kid').order('display_order');
+        .from('family_members').select('*').in('role', ['kid', 'parent']).order('display_order');
     if (error) { console.error(error); childPicker.innerHTML = '<div>Could not load children: ' + esc(error.message) + (error.code ? ' (' + esc(error.code) + ')' : '') + '</div>'; return; }
     childPicker.innerHTML = '';
     const faces = ['🦄', '🦊', '🐸', '🐼'];
@@ -72,9 +72,9 @@ async function showChildPicker() {
         childPicker.appendChild(b);
     });
     if (!data || !data.length) {
-        childPicker.innerHTML = '<div class="card" style="grid-column:1/-1">No kids returned.<br>' +
+        childPicker.innerHTML = '<div class="card" style="grid-column:1/-1">No family members returned.<br>' +
             'Logged in as: ' + esc(currentUser && currentUser.id) + '<br>' +
-            'Kids are the family_members rows with role = kid. If there are some, the RLS policy on family_members is likely missing or wrong.</div>';
+            'Members are the family_members rows with role = kid or parent. If there are some, the RLS policy on family_members is likely missing or wrong.</div>';
     }
 }
 
