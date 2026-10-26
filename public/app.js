@@ -87,6 +87,24 @@ async function showChild(child) {
     await loadData();
 }
 
+const signedAmount = (t) => (t.type === 'withdrawal' ? -1 : 1) * Number(t.amount);
+
+// Time-weighted average balance over [start, end): each balance holds until the next transaction.
+function averageBalance(txs, start, end) {
+    const inMonth = txs.filter((t) => +new Date(t.occurred_at) >= start && +new Date(t.occurred_at) < end)
+        .sort((a, b) => new Date(a.occurred_at) - new Date(b.occurred_at));
+    let balance = txs.filter((t) => +new Date(t.occurred_at) < start).reduce((s, t) => s + signedAmount(t), 0);
+    let at = start, weighted = 0;
+    inMonth.forEach((t) => {
+        const when = +new Date(t.occurred_at);
+        weighted += balance * (when - at);
+        at = when;
+        balance += signedAmount(t);
+    });
+    weighted += balance * (end - at);
+    return weighted / (end - start);
+}
+
 async function ensureInterest(child) {
     const rate = getRate();
     if (!rate) return;
@@ -98,16 +116,17 @@ async function ensureInterest(child) {
     const first = new Date(txs[0].occurred_at);
     const now = new Date();
     let y = first.getUTCFullYear(), m = first.getUTCMonth() + 1;
-    while (Date.UTC(y, m, 1) <= now.getTime()) {
+    // Only months that have fully ended get interest, so the average is final.
+    while (Date.UTC(y, m + 1, 1) <= now.getTime()) {
         const start = Date.UTC(y, m, 1), end = Date.UTC(y, m + 1, 1);
         const has = txs.some((t) => t.type === 'interest' && +new Date(t.occurred_at) >= start && +new Date(t.occurred_at) < end);
         if (!has) {
-            const bal = txs.filter((t) => +new Date(t.occurred_at) < start)
-                .reduce((s, t) => s + (t.type === 'withdrawal' ? -1 : 1) * Number(t.amount), 0);
-            const amt = Math.round(bal * rate) / 100;
+            // Average balance across the month, rounded to the nearest cent.
+            const amt = Math.round(averageBalance(txs, start, end) * rate) / 100;
             if (amt > 0) {
+                // Noon UTC on the last day of the month, so it stays on that date in any timezone.
                 const row = { member_name: child.name, type: 'interest',
-                    amount: amt, note: 'Monthly interest ' + rate + '%', occurred_at: new Date(start).toISOString() };
+                    amount: amt, note: 'Monthly interest ' + rate + '% on average balance', occurred_at: new Date(end - 12 * 3600e3).toISOString() };
                 const ins = await _supabase.from('allowance_transactions').insert(row);
                 // 23505: another device already paid this month's interest (one per kid per month).
                 if (ins.error && ins.error.code !== '23505') { showError('Interest save failed: ' + ins.error.message); return; }
