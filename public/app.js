@@ -15,7 +15,18 @@ const recordForm = $('record-form');
 let currentUser = null;
 let currentChild = null;
 const ANIM_MS = 3000;
-const getRate = () => { const r = parseFloat(localStorage.getItem('interestRate')); return isNaN(r) ? 5 : r; };
+// Shared monthly interest rate (%). Stored in allowance_settings; the month-end job in the database pays it.
+let monthlyRate = 5;
+const renderRate = () => {
+    $('rate-line').innerText = 'Interest: ' + monthlyRate + '% a month on each balance, paid on the last day of the month.';
+};
+async function loadRate() {
+    const { data, error } = await _supabase.from('allowance_settings').select('value')
+        .eq('key', 'monthly_interest_rate').maybeSingle();
+    if (error) showError('Interest rate: ' + error.message);
+    else if (data) monthlyRate = Number(data.value);
+    renderRate();
+}
 
 function showError(msg) {
     console.error(msg);
@@ -59,6 +70,7 @@ async function showChildPicker() {
     $('ledger-view').style.display = 'none';
     childView.style.display = 'none';
     childPicker.style.display = 'grid';
+    await loadRate();
     const { data, error } = await _supabase
         .from('family_members').select('*').in('role', ['kid', 'parent']).order('display_order');
     if (error) { console.error(error); childPicker.innerHTML = '<div>Could not load children: ' + esc(error.message) + (error.code ? ' (' + esc(error.code) + ')' : '') + '</div>'; return; }
@@ -87,56 +99,6 @@ async function showChild(child) {
     await loadData();
 }
 
-const signedAmount = (t) => (t.type === 'withdrawal' ? -1 : 1) * Number(t.amount);
-
-// Time-weighted average balance over [start, end): each balance holds until the next transaction.
-function averageBalance(txs, start, end) {
-    const inMonth = txs.filter((t) => +new Date(t.occurred_at) >= start && +new Date(t.occurred_at) < end)
-        .sort((a, b) => new Date(a.occurred_at) - new Date(b.occurred_at));
-    let balance = txs.filter((t) => +new Date(t.occurred_at) < start).reduce((s, t) => s + signedAmount(t), 0);
-    let at = start, weighted = 0;
-    inMonth.forEach((t) => {
-        const when = +new Date(t.occurred_at);
-        weighted += balance * (when - at);
-        at = when;
-        balance += signedAmount(t);
-    });
-    weighted += balance * (end - at);
-    return weighted / (end - start);
-}
-
-async function ensureInterest(child) {
-    const rate = getRate();
-    if (!rate) return;
-    const { data, error } = await _supabase.from('allowance_transactions').select('*')
-        .eq('member_name', child.name).order('occurred_at', { ascending: true });
-    if (error) { showError('Interest check: ' + error.message); return; }
-    const txs = data || [];
-    if (!txs.length) return;
-    const first = new Date(txs[0].occurred_at);
-    const now = new Date();
-    let y = first.getUTCFullYear(), m = first.getUTCMonth() + 1;
-    // Only months that have fully ended get interest, so the average is final.
-    while (Date.UTC(y, m + 1, 1) <= now.getTime()) {
-        const start = Date.UTC(y, m, 1), end = Date.UTC(y, m + 1, 1);
-        const has = txs.some((t) => t.type === 'interest' && +new Date(t.occurred_at) >= start && +new Date(t.occurred_at) < end);
-        if (!has) {
-            // Average balance across the month, rounded to the nearest cent.
-            const amt = Math.round(averageBalance(txs, start, end) * rate) / 100;
-            if (amt > 0) {
-                // Noon UTC on the last day of the month, so it stays on that date in any timezone.
-                const row = { member_name: child.name, type: 'interest',
-                    amount: amt, note: 'Monthly interest ' + rate + '% on average balance', occurred_at: new Date(end - 12 * 3600e3).toISOString() };
-                const ins = await _supabase.from('allowance_transactions').insert(row);
-                // 23505: another device already paid this month's interest (one per kid per month).
-                if (ins.error && ins.error.code !== '23505') { showError('Interest save failed: ' + ins.error.message); return; }
-                txs.push(row);
-            }
-        }
-        m++; if (m > 11) { m = 0; y++; }
-    }
-}
-
 function countUp(el, target, ms) {
     const t0 = performance.now();
     const step = (now) => {
@@ -153,7 +115,6 @@ async function showLedger() {
     $('ledger-name').innerText = currentChild.name.toUpperCase() + "'S LEDGER";
     $('ledger-balance').innerText = '$0.00';
     $('ledger-list').innerHTML = '';
-    await ensureInterest(currentChild);
     const { data, error } = await _supabase.from('allowance_transactions').select('*').eq('member_name', currentChild.name)
         .order('occurred_at', { ascending: false });
     if (error) { showError('Ledger: ' + error.message); return; }
@@ -170,7 +131,6 @@ async function showLedger() {
 }
 
 async function loadData() {
-    await ensureInterest(currentChild);
     const [tx, rq] = await Promise.all([
         _supabase.from('allowance_transactions').select('*').eq('member_name', currentChild.name)
             .order('occurred_at', { ascending: false }),
@@ -213,13 +173,17 @@ $('ledger-btn').addEventListener('click', showLedger);
 $('ledger-back').addEventListener('click', () => { $('ledger-view').style.display = 'none'; childView.style.display = 'block'; loadData(); });
 $('settings-btn').addEventListener('click', () => {
     const c = $('settings-card');
-    $('rate-input').value = getRate();
+    $('rate-input').value = monthlyRate;
     c.style.display = c.style.display === 'none' ? 'block' : 'none';
 });
-$('rate-save').addEventListener('click', () => {
+$('rate-save').addEventListener('click', async () => {
     const r = parseFloat($('rate-input').value);
     if (isNaN(r) || r < 0) { showError('Enter a valid interest rate.'); return; }
-    localStorage.setItem('interestRate', r);
+    const { error } = await _supabase.from('allowance_settings')
+        .upsert({ key: 'monthly_interest_rate', value: r, updated_at: new Date().toISOString() });
+    if (error) { showError('Rate save failed: ' + error.message); return; }
+    monthlyRate = r;
+    renderRate();
     $('settings-card').style.display = 'none';
 });
 
